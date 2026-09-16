@@ -8,9 +8,9 @@ import {
   Get,
   Request,
 } from '@nestjs/common';
-import { AuthService } from './auth.service';
-import { CreateUserDto, LoginDto } from './dto/auth.dto';
-import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
+import { AuthService } from './auth.service.js';
+import { CreateUserDto, LoginDto } from './dto/auth.dto.js';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 
 @Controller('auth')
 export class AuthController {
@@ -29,7 +29,7 @@ export class AuthController {
 
   @Get('profile')
   @UseGuards(JwtAuthGuard)
-  async getProfile(@Request() req) {
+  async getProfile(@Request() req: any) {
     return this.authService.validateUser(req.user.sub);
   }
 }

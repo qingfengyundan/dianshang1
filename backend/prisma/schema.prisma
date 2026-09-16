@@ -17,11 +17,13 @@ datasource db {
 /// 商家租户表
 model Tenant {
   id              Int       @id @default(autoincrement())
-  name            String    @db.VarChar(100)
+  name            String    @unique @db.VarChar(100)
+  displayName     String    @map("display_name") @db.VarChar(100)
   contactPerson   String?   @map("contact_person") @db.VarChar(50)
   email           String?   @db.VarChar(100)
   phone           String?   @db.VarChar(20)
-  status          String    @default("active") @db.VarChar(20) // active, suspended, deleted
+  config          Json?     @default("{}")
+  isActive        Boolean   @default(true) @map("is_active")
   planType        String?   @map("plan_type") @db.VarChar(20)
   planExpiresAt   DateTime? @map("plan_expires_at")
   createdAt       DateTime  @default(now()) @map("created_at")
@@ -62,19 +64,22 @@ model User {
 
 /// 商家店铺表
 model Shop {
-  id          Int       @id @default(autoincrement())
-  tenantId    Int       @map("tenant_id")
-  name        String    @db.VarChar(100)
-  platform    String    @db.VarChar(20) // taobao, pinduoduo, douyin
-  shopUrl     String    @map("shop_url") @db.VarChar(255)
-  credentials Json?     // 加密存储的登录凭证
-  status      String    @default("active") @db.VarChar(20)
-  lastSyncAt  DateTime? @map("last_sync_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  id           Int       @id @default(autoincrement())
+  tenantId     Int       @map("tenant_id")
+  name         String    @db.VarChar(100)
+  platform     String    @db.VarChar(20) // taobao, pinduoduo, douyin
+  shopUrl      String?   @map("shop_url") @db.VarChar(255)
+  apiKey       String?   @map("api_key") @db.VarChar(255)
+  apiSecret    String?   @map("api_secret") @db.VarChar(255)
+  accessToken  String?   @map("access_token") @db.VarChar(500)
+  isActive     Boolean   @default(true) @map("is_active")
+  lastSyncAt   DateTime? @map("last_sync_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   // 关联
-  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  metrics     Metric[]
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  metrics      Metric[]
 
   @@index([tenantId])
   @@map("shops")
