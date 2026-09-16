@@ -5,9 +5,10 @@ import { DatabaseModule } from './database/database.module.js';
 import { AuthModule } from './modules/auth/auth.module.js';
 import { TenantModule } from './modules/tenant/tenant.module.js';
 import { ShopModule } from './modules/shop/shop.module.js';
+import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TenantModule, ShopModule],
+  imports: [DatabaseModule, AuthModule, TenantModule, ShopModule, DashboardModule],
   controllers: [AppController],
   providers: [AppService],
 })

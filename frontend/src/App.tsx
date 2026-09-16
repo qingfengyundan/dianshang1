@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
+import DashboardPage from './pages/merchant/Dashboard';
 import { authService } from './services/auth.service';
 
 // 路由守卫
@@ -16,28 +17,18 @@ function App() {
         {/* 公共路由 */}
         <Route path="/login" element={<Login />} />
 
-        {/* 系统后台路由 */}
-        <Route
-          path="/system/*"
-          element={
-            <PrivateRoute>
-              <div>系统后台 - 开发中</div>
-            </PrivateRoute>
-          }
-        />
-
         {/* 商家后台路由 */}
         <Route
-          path="/merchant/*"
+          path="/merchant/dashboard"
           element={
             <PrivateRoute>
-              <div>商家后台 - 开发中</div>
+              <DashboardPage />
             </PrivateRoute>
           }
         />
 
         {/* 默认重定向 */}
-        <Route path="/" element={<Navigate to="/login" />} />
+        <Route path="/" element={<Navigate to="/merchant/dashboard" />} />
       </Routes>
     </BrowserRouter>
   );
