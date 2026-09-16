@@ -1,0 +1,287 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// 租户与用户管理
+// ============================================
+
+/// 商家租户表
+model Tenant {
+  id              Int       @id @default(autoincrement())
+  name            String    @db.VarChar(100)
+  contactPerson   String?   @map("contact_person") @db.VarChar(50)
+  email           String?   @db.VarChar(100)
+  phone           String?   @db.VarChar(20)
+  status          String    @default("active") @db.VarChar(20) // active, suspended, deleted
+  planType        String?   @map("plan_type") @db.VarChar(20)
+  planExpiresAt   DateTime? @map("plan_expires_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  // 关联
+  users           User[]
+  shops           Shop[]
+  merchantSkills  MerchantSkill[]
+  metrics         Metric[]
+  aiAnalysis      AiAnalysis[]
+  agentTasks      AgentTask[]
+  competitors     Competitor[]
+  competitorAlerts CompetitorAlert[]
+
+  @@map("tenants")
+}
+
+/// 用户表
+model User {
+  id           Int       @id @default(autoincrement())
+  tenantId     Int?      @map("tenant_id")
+  username     String    @unique @db.VarChar(50)
+  passwordHash String    @map("password_hash") @db.VarChar(255)
+  role         String    @db.VarChar(20) // system_admin, merchant_admin, merchant_user
+  permissions  Json?
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // 关联
+  tenant       Tenant?   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("users")
+}
+
+// ============================================
+// 店铺管理
+// ============================================
+
+/// 商家店铺表
+model Shop {
+  id          Int       @id @default(autoincrement())
+  tenantId    Int       @map("tenant_id")
+  name        String    @db.VarChar(100)
+  platform    String    @db.VarChar(20) // taobao, pinduoduo, douyin
+  shopUrl     String    @map("shop_url") @db.VarChar(255)
+  credentials Json?     // 加密存储的登录凭证
+  status      String    @default("active") @db.VarChar(20)
+  lastSyncAt  DateTime? @map("last_sync_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  // 关联
+  tenant      Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  metrics     Metric[]
+
+  @@index([tenantId])
+  @@map("shops")
+}
+
+// ============================================
+// 知识库管理
+// ============================================
+
+/// 系统通用知识库表
+model SystemSkill {
+  id             Int       @id @default(autoincrement())
+  name           String    @db.VarChar(100)
+  slug           String    @unique @db.VarChar(100)
+  category       String?   @db.VarChar(50)
+  subCategory    String?   @map("sub_category") @db.VarChar(50)
+  description    String?   @db.Text
+  content        String    @db.Text // YAML 格式
+  version        String?   @db.VarChar(20)
+  status         String    @default("draft") @db.VarChar(20) // draft, published, archived
+  platforms      Json?     // ['taobao', 'pinduoduo', 'douyin']
+  usageCount     Int       @default(0) @map("usage_count")
+  downloadCount  Int       @default(0) @map("download_count")
+  rating         Decimal?  @db.Decimal(3, 2)
+  authorId       Int?      @map("author_id")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+  publishedAt    DateTime? @map("published_at")
+
+  // 关联
+  merchantSkills MerchantSkill[]
+  versions       SkillVersion[]
+
+  @@map("system_skills")
+}
+
+/// Skill 版本历史表
+model SkillVersion {
+  id        Int      @id @default(autoincrement())
+  skillId   Int      @map("skill_id")
+  version   String   @db.VarChar(20)
+  content   String   @db.Text
+  changelog String?  @db.Text
+  createdAt DateTime @default(now()) @map("created_at")
+
+  // 关联
+  skill     SystemSkill @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@index([skillId])
+  @@map("skill_versions")
+}
+
+/// 商家自定义 Skill 表
+model MerchantSkill {
+  id            Int      @id @default(autoincrement())
+  tenantId      Int      @map("tenant_id")
+  name          String   @db.VarChar(100)
+  baseSkillId   Int?     @map("base_skill_id")
+  sourceVersion String?  @map("source_version") @db.VarChar(20)
+  content       String   @db.Text
+  isCustomized  Boolean  @default(false) @map("is_customized")
+  status        String   @default("active") @db.VarChar(20)
+  usageCount    Int      @default(0) @map("usage_count")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  // 关联
+  tenant        Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  baseSkill     SystemSkill? @relation(fields: [baseSkillId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@map("merchant_skills")
+}
+
+// ============================================
+// 数据分析
+// ============================================
+
+/// 数据指标表
+model Metric {
+  id             Int      @id @default(autoincrement())
+  tenantId       Int      @map("tenant_id")
+  shopId         Int      @map("shop_id")
+  date           DateTime @db.Date
+  gmv            Decimal? @db.Decimal(12, 2)
+  orders         Int?
+  uv             Int?
+  pv             Int?
+  conversionRate Decimal? @map("conversion_rate") @db.Decimal(5, 2)
+  cartRate       Decimal? @map("cart_rate") @db.Decimal(5, 2)
+  favoriteRate   Decimal? @map("favorite_rate") @db.Decimal(5, 2)
+  rawData        Json?    @map("raw_data")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  // 关联
+  tenant         Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shop           Shop     @relation(fields: [shopId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, date])
+  @@index([shopId])
+  @@map("metrics")
+}
+
+/// AI 分析记录表
+model AiAnalysis {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int      @map("tenant_id")
+  shopId       Int?     @map("shop_id")
+  analysisDate DateTime @map("analysis_date") @db.Date
+  insights     Json?
+  suggestions  Json?
+  priority     String?  @db.VarChar(20)
+  status       String?  @db.VarChar(20)
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // 关联
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("ai_analysis")
+}
+
+// ============================================
+// 智能体任务管理
+// ============================================
+
+/// 智能体任务表
+model AgentTask {
+  id           Int       @id @default(autoincrement())
+  tenantId     Int       @map("tenant_id")
+  taskType     String    @map("task_type") @db.VarChar(50)
+  agentId      String?   @map("agent_id") @db.VarChar(50)
+  skillId      Int?      @map("skill_id")
+  skillType    String?   @map("skill_type") @db.VarChar(20) // system, merchant
+  params       Json?
+  status       String    @db.VarChar(20) // pending, running, completed, failed
+  result       Json?
+  errorMessage String?   @map("error_message") @db.Text
+  createdAt    DateTime  @default(now()) @map("created_at")
+  startedAt    DateTime? @map("started_at")
+  completedAt  DateTime? @map("completed_at")
+
+  // 关联
+  tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status])
+  @@map("agent_tasks")
+}
+
+// ============================================
+// 竞品监测
+// ============================================
+
+/// 竞品表
+model Competitor {
+  id               Int      @id @default(autoincrement())
+  tenantId         Int      @map("tenant_id")
+  myProductId      Int?     @map("my_product_id")
+  competitorName   String   @map("competitor_name") @db.VarChar(200)
+  competitorUrl    String   @map("competitor_url") @db.VarChar(500)
+  platform         String   @db.VarChar(20)
+  monitoredMetrics Json?    @map("monitored_metrics")
+  status           String   @default("active") @db.VarChar(20)
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  // 关联
+  tenant           Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  snapshots        CompetitorSnapshot[]
+
+  @@index([tenantId])
+  @@map("competitors")
+}
+
+/// 竞品数据快照表
+model CompetitorSnapshot {
+  id           Int       @id @default(autoincrement())
+  competitorId Int       @map("competitor_id")
+  snapshotTime DateTime  @default(now()) @map("snapshot_time")
+  price        Decimal?  @db.Decimal(10, 2)
+  salesVolume  Int?      @map("sales_volume")
+  rating       Decimal?  @db.Decimal(3, 2)
+  reviewCount  Int?      @map("review_count")
+  title        String?   @db.VarChar(500)
+  rawData      Json?     @map("raw_data")
+
+  // 关联
+  competitor   Competitor @relation(fields: [competitorId], references: [id], onDelete: Cascade)
+
+  @@index([competitorId, snapshotTime])
+  @@map("competitor_snapshots")
+}
+
+/// 竞品预警表
+model CompetitorAlert {
+  id           Int      @id @default(autoincrement())
+  tenantId     Int      @map("tenant_id")
+  competitorId Int      @map("competitor_id")
+  alertType    String   @map("alert_type") @db.VarChar(50)
+  severity     String   @db.VarChar(20)
+  message      String   @db.Text
+  isRead       Boolean  @default(false) @map("is_read")
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  // 关联
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("competitor_alerts")
+}
