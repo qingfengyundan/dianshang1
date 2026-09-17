@@ -102,7 +102,7 @@ const AiConfigPage: React.FC = () => {
             <Form.Item
               name="apiKey"
               label="API Key"
-              rules={[{ required: true, message: '请输入 API Key' }]}
+              rules={config ? [] : [{ required: true, message: '请输入 API Key' }]}
               extra={config ? '留空并保存将沿用现有 Key（已脱敏显示）' : '填写中转服务提供的密钥'}
             >
               <Input.Password placeholder="sk-..." />

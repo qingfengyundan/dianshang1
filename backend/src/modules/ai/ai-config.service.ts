@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { BadRequestException, Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { UpsertAiConfigDto } from './dto/ai-config.dto.js';
 import { AiConfig } from '@prisma/client';
@@ -46,6 +46,13 @@ function toSafe(config: AiConfig): SafeAiConfig {
 export class AiConfigService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** 解析 apiKey：本次传了就用新的，留空则沿用已有值（已有配置时） */
+  private resolveApiKey(incoming?: string, existing?: string): string {
+    if (incoming && incoming.trim()) return incoming;
+    if (existing) return existing;
+    throw new BadRequestException('apiKey 不能为空');
+  }
+
   /** 全局默认配置（tenantId = null） */
   async getGlobal(): Promise<SafeAiConfig | null> {
     const config = await this.prisma.aiConfig.findFirst({
@@ -59,9 +66,11 @@ export class AiConfigService {
       where: { tenantId: null },
     });
 
+    const apiKey = this.resolveApiKey(dto.apiKey, existing?.apiKey);
+
     const data = {
       baseUrl: dto.baseUrl,
-      apiKey: dto.apiKey,
+      apiKey,
       model: dto.model,
       isActive: dto.isActive ?? true,
     };
@@ -87,21 +96,20 @@ export class AiConfigService {
       throw new NotFoundException('商户不存在');
     }
 
+    const existing = await this.prisma.aiConfig.findUnique({ where: { tenantId } });
+    const apiKey = this.resolveApiKey(dto.apiKey, existing?.apiKey);
+
+    const data = {
+      baseUrl: dto.baseUrl,
+      apiKey,
+      model: dto.model,
+      isActive: dto.isActive ?? true,
+    };
+
     const config = await this.prisma.aiConfig.upsert({
       where: { tenantId },
-      create: {
-        tenantId,
-        baseUrl: dto.baseUrl,
-        apiKey: dto.apiKey,
-        model: dto.model,
-        isActive: dto.isActive ?? true,
-      },
-      update: {
-        baseUrl: dto.baseUrl,
-        apiKey: dto.apiKey,
-        model: dto.model,
-        isActive: dto.isActive ?? true,
-      },
+      create: { ...data, tenantId },
+      update: data,
     });
     return toSafe(config);
   }

@@ -5,9 +5,10 @@ export class UpsertAiConfigDto {
   @IsNotEmpty({ message: 'baseUrl 不能为空' })
   baseUrl: string;
 
+  /** 留空表示沿用已有 Key（前端不回显明文，无法重新提交） */
+  @IsOptional()
   @IsString()
-  @IsNotEmpty({ message: 'apiKey 不能为空' })
-  apiKey: string;
+  apiKey?: string;
 
   @IsString()
   @IsNotEmpty({ message: 'model 不能为空' })

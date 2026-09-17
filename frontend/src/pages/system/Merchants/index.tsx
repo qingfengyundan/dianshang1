@@ -314,8 +314,8 @@ const MerchantsPage: React.FC = () => {
             <Form.Item
               name="apiKey"
               label="API Key"
-              rules={[{ required: true, message: '请输入 API Key' }]}
-              extra={aiConfig ? '留空并保存将使用新 Key；当前 Key 已脱敏显示' : undefined}
+              rules={aiConfig ? [] : [{ required: true, message: '请输入 API Key' }]}
+              extra={aiConfig ? '留空并保存将沿用现有 Key（已脱敏显示）' : undefined}
             >
               <Input.Password placeholder="sk-..." />
             </Form.Item>
