@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
-  Row, Col, Card, Statistic, Select, Spin, message,
-  Table, Tag, Typography, Progress, Button,
+  Row, Col, Card, Select, Spin, message,
+  Table, Tag, Typography, Progress, Button, Collapse,
 } from 'antd';
 import {
   ArrowUpOutlined, ArrowDownOutlined, ShopOutlined,
@@ -12,6 +12,7 @@ import ReactECharts from 'echarts-for-react';
 import { dashboardService, type MetricsSummary } from '../../../services/dashboard.service';
 import { PLATFORM_LABELS } from '../../../constants';
 import { AiInsightsCard } from './AiInsightsCard';
+import { PlatformComparisonCard } from './PlatformComparisonCard';
 import { AiReportModal } from './AiReportModal';
 import { AiChatModal } from './AiChatModal';
 
@@ -117,6 +118,30 @@ const DashboardPage: React.FC = () => {
     },
   ];
 
+  // 紧凑型核心指标条：作为 AI 洞察的上下文，不再占满顶部黄金位置
+  const metricItems = [
+    {
+      title: '总销售额 (GMV)', value: data?.totalGmv ?? 0, prefix: '¥',
+      color: '#1890ff', icon: <ShopOutlined />, precision: 0,
+      growth: data?.gmvGrowth,
+    },
+    {
+      title: '总订单量', value: data?.totalOrders ?? 0, prefix: '',
+      color: '#52c41a', icon: <ThunderboltOutlined />, precision: 0,
+      growth: data?.ordersGrowth,
+    },
+    {
+      title: '平均转化率', value: (data?.avgConversionRate ?? 0) * 100, prefix: '',
+      color: '#faad14', icon: <BarChartOutlined />, precision: 2, suffix: '%',
+      growth: undefined,
+    },
+    {
+      title: '日均访客 (UV)', value: data?.avgUv ?? 0, prefix: '',
+      color: '#eb2f96', icon: <TeamOutlined />, precision: 0,
+      growth: undefined,
+    },
+  ];
+
   return (
     <Spin spinning={loading}>
       <div style={{ padding: '0 4px' }}>
@@ -151,70 +176,49 @@ const DashboardPage: React.FC = () => {
           </div>
         </div>
 
-        {/* 核心指标卡片 */}
-        <Row gutter={[16, 16]}>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="总销售额 (GMV)"
-                value={data?.totalGmv || 0}
-                precision={0}
-                valueStyle={{ color: '#1890ff' }}
-                prefix={<ShopOutlined />}
-                suffix="元"
-                formatter={(v) => `¥${Number(v).toLocaleString()}`}
-              />
-              {data && (
-                <div style={{ marginTop: 8, fontSize: 12, color: data.gmvGrowth >= 0 ? '#3f8600' : '#cf1322' }}>
-                  {data.gmvGrowth >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
-                  {' '}{Math.abs(data.gmvGrowth).toFixed(1)}% vs 上周期
+        {/* AI 运营洞察 —— 置顶：分析 + 建议是核心价值 */}
+        <AiInsightsCard days={days} />
+
+        {/* 跨平台对比 —— 单平台后台看不到的差异化价值 */}
+        <PlatformComparisonCard shops={data?.shopBreakdown || []} />
+
+        {/* 紧凑指标条 —— 数据上下文，降级展示 */}
+        <Card size="small" style={{ marginBottom: 16 }}>
+          <Row gutter={16}>
+            {metricItems.map((m) => (
+              <Col xs={12} sm={12} lg={6} key={m.title}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div
+                    style={{
+                      width: 40, height: 40, borderRadius: 8,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      background: `${m.color}1a`, color: m.color, fontSize: 20,
+                    }}
+                  >
+                    {m.icon}
+                  </div>
+                  <div style={{ flex: 1 }}>
+                    <div style={{ color: '#888', fontSize: 12, marginBottom: 2 }}>{m.title}</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                      <span style={{ fontSize: 20, fontWeight: 700, color: m.color }}>
+                        {m.prefix}{Number(m.value).toLocaleString('zh-CN', { maximumFractionDigits: m.precision, minimumFractionDigits: m.precision })}{m.suffix}
+                      </span>
+                      {m.growth !== undefined && (
+                        <span style={{ fontSize: 12, color: m.growth >= 0 ? '#3f8600' : '#cf1322' }}>
+                          {m.growth >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
+                          {Math.abs(m.growth).toFixed(1)}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
                 </div>
-              )}
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="总订单量"
-                value={data?.totalOrders || 0}
-                valueStyle={{ color: '#52c41a' }}
-                prefix={<ThunderboltOutlined />}
-                suffix="单"
-              />
-              {data && (
-                <div style={{ marginTop: 8, fontSize: 12, color: data.ordersGrowth >= 0 ? '#3f8600' : '#cf1322' }}>
-                  {data.ordersGrowth >= 0 ? <ArrowUpOutlined /> : <ArrowDownOutlined />}
-                  {' '}{Math.abs(data.ordersGrowth).toFixed(1)}% vs 上周期
-                </div>
-              )}
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="平均转化率"
-                value={((data?.avgConversionRate || 0) * 100).toFixed(2)}
-                valueStyle={{ color: '#faad14' }}
-                prefix={<BarChartOutlined />}
-                suffix="%"
-              />
-            </Card>
-          </Col>
-          <Col xs={24} sm={12} lg={6}>
-            <Card>
-              <Statistic
-                title="日均访客 (UV)"
-                value={data?.avgUv || 0}
-                valueStyle={{ color: '#eb2f96' }}
-                prefix={<TeamOutlined />}
-                suffix="人"
-              />
-            </Card>
-          </Col>
-        </Row>
+              </Col>
+            ))}
+          </Row>
+        </Card>
 
         {/* 图表区 */}
-        <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
           <Col xs={24} lg={16}>
             <Card title="销售趋势">
               <ReactECharts option={trendChartOption} style={{ height: 280 }} />
@@ -227,19 +231,32 @@ const DashboardPage: React.FC = () => {
           </Col>
         </Row>
 
-        {/* 店铺明细表 */}
-        <Card title="各店铺数据明细" style={{ marginTop: 16 }}>
-          <Table
-            columns={shopColumns}
-            dataSource={data?.shopBreakdown || []}
-            rowKey="shopId"
-            pagination={false}
-            size="middle"
-          />
-        </Card>
-
-        {/* AI 数据洞察 */}
-        <AiInsightsCard days={days} />
+        {/* 店铺明细表 —— 折叠到次位 */}
+        <Collapse
+          ghost
+          items={[
+            {
+              key: '1',
+              label: (
+                <span style={{ fontWeight: 600 }}>
+                  各店铺数据明细
+                  <span style={{ color: '#999', fontWeight: 400, marginLeft: 8, fontSize: 12 }}>
+                    （点击展开）
+                  </span>
+                </span>
+              ),
+              children: (
+                <Table
+                  columns={shopColumns}
+                  dataSource={data?.shopBreakdown || []}
+                  rowKey="shopId"
+                  pagination={false}
+                  size="middle"
+                />
+              ),
+            },
+          ]}
+        />
 
         {/* AI 报告生成弹窗 */}
         <AiReportModal
