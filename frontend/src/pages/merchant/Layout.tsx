@@ -3,6 +3,7 @@ import { Layout, Menu, Typography, Button, Space } from 'antd';
 import {
   DashboardOutlined,
   ShopOutlined,
+  SyncOutlined,
   LogoutOutlined,
   UserOutlined,
 } from '@ant-design/icons';
@@ -20,6 +21,7 @@ const MerchantLayout: React.FC = () => {
   const menuItems = [
     { key: '/merchant/dashboard', icon: <DashboardOutlined />, label: '数据看板' },
     { key: '/merchant/shops', icon: <ShopOutlined />, label: '店铺管理' },
+    { key: '/merchant/data-sync', icon: <SyncOutlined />, label: '数据同步' },
   ];
 
   // 高亮当前菜单：匹配一级路径

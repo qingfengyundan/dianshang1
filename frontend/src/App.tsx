@@ -4,6 +4,7 @@ import { Login } from './pages/Login';
 import MerchantLayout from './pages/merchant/Layout';
 import DashboardPage from './pages/merchant/Dashboard';
 import ShopsPage from './pages/merchant/Shops';
+import DataSyncPage from './pages/merchant/DataSync';
 import SystemLayout from './pages/system/Layout';
 import SystemMerchantsPage from './pages/system/Merchants';
 import SystemAiConfigPage from './pages/system/AiConfig';
@@ -46,7 +47,8 @@ function App() {
           }
         >
           <Route path="dashboard" element={<DashboardPage />} />
-          <Route path="shops" element={<ShopsPage />} />
+        <Route path="shops" element={<ShopsPage />} />
+        <Route path="data-sync" element={<DataSyncPage />} />
           <Route index element={<Navigate to="/merchant/dashboard" />} />
         </Route>
 

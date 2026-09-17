@@ -38,6 +38,7 @@ model Tenant {
   agentTasks      AgentTask[]
   competitors     Competitor[]
   competitorAlerts CompetitorAlert[]
+  dataSyncs       DataSync[]
   aiConfig        AiConfig?
 
   @@map("tenants")
@@ -82,6 +83,7 @@ model Shop {
   // 关联
   tenant       Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   metrics      Metric[]
+  dataSyncs    DataSync[]
 
   @@index([tenantId])
   @@map("shops")
@@ -183,6 +185,26 @@ model Metric {
   @@index([tenantId, date])
   @@index([shopId])
   @@map("metrics")
+}
+
+/// 店铺数据同步记录。当前数据源为 mock_data，平台 API 接入后复用此任务记录。
+model DataSync {
+  id            Int       @id @default(autoincrement())
+  tenantId      Int       @map("tenant_id")
+  shopId        Int?      @map("shop_id")
+  status        String    @db.VarChar(20) // running, success, failed
+  source        String    @default("mock_data") @db.VarChar(30)
+  recordsSynced Int       @default(0) @map("records_synced")
+  errorMessage  String?   @map("error_message") @db.Text
+  startedAt     DateTime  @default(now()) @map("started_at")
+  completedAt   DateTime? @map("completed_at")
+
+  tenant        Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  shop          Shop?     @relation(fields: [shopId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, startedAt])
+  @@index([shopId])
+  @@map("data_syncs")
 }
 
 /// AI 分析记录表

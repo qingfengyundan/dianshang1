@@ -8,9 +8,10 @@ import { ShopModule } from './modules/shop/shop.module.js';
 import { DashboardModule } from './modules/dashboard/dashboard.module.js';
 import { AiModule } from './modules/ai/ai.module.js';
 import { MerchantAccountModule } from './modules/merchant-account/merchant-account.module.js';
+import { DataSyncModule } from './modules/data-sync/data-sync.module.js';
 
 @Module({
-  imports: [DatabaseModule, AuthModule, TenantModule, ShopModule, DashboardModule, AiModule, MerchantAccountModule],
+  imports: [DatabaseModule, AuthModule, TenantModule, ShopModule, DashboardModule, AiModule, MerchantAccountModule, DataSyncModule],
   controllers: [AppController],
   providers: [AppService],
 })
