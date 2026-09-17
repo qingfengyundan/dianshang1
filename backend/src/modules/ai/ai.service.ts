@@ -1,6 +1,11 @@
 import { Injectable, Logger, ServiceUnavailableException } from '@nestjs/common';
 import OpenAI from 'openai';
-import { DashboardService, type MetricsSummary } from '../dashboard/dashboard.service.js';
+import {
+  DashboardService,
+  type MetricsSummary,
+  type GetSummaryOptions,
+} from '../dashboard/dashboard.service.js';
+import { AiConfigService, type ResolvedAiConfig } from './ai-config.service.js';
 
 export interface InsightResult {
   title: string;
@@ -18,33 +23,37 @@ export interface ChatContext {
 @Injectable()
 export class AiService {
   private readonly logger = new Logger(AiService.name);
-  private openai: OpenAI | null = null;
   private readonly cacheStore = new Map<string, { data: any; timestamp: number }>();
   private readonly CACHE_TTL = 15 * 60 * 1000; // 15 分钟
+  // 按「baseUrl + model」指纹缓存 OpenAI client，配置变更后自动重建
+  private readonly clients = new Map<string, OpenAI>();
 
-  constructor(private readonly dashboardService: DashboardService) {
-    const apiKey = process.env.OPENAI_API_KEY;
-    if (!apiKey || apiKey === 'your-openai-api-key-here') {
-      this.logger.warn('OPENAI_API_KEY 未配置，AI 功能不可用');
-      return;
+  constructor(
+    private readonly dashboardService: DashboardService,
+    private readonly aiConfigService: AiConfigService,
+  ) {}
+
+  /**
+   * 解析运行时配置并返回可用的 OpenAI client + model。
+   * 无可用配置时抛 503（保留原有语义）。
+   */
+  private async resolveClient(tenantId?: number): Promise<{ openai: OpenAI; model: string }> {
+    const config: ResolvedAiConfig | null = await this.aiConfigService.resolve(tenantId);
+    if (!config) {
+      throw new ServiceUnavailableException('AI 服务未配置，请在系统后台「AI 配置」中设置大模型服务');
     }
 
-    this.openai = new OpenAI({
-      apiKey,
-      baseURL: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
-    });
-  }
-
-  /** 确认 OpenAI 客户端已就绪，否则返回明确的 503 */
-  private requireClient(): OpenAI {
-    if (!this.openai) {
-      throw new ServiceUnavailableException('AI 服务未配置，请在后端 .env 中设置 OPENAI_API_KEY');
+    const fingerprint = `${config.baseUrl}::${config.model}`;
+    let openai = this.clients.get(fingerprint);
+    if (!openai) {
+      openai = new OpenAI({
+        apiKey: config.apiKey,
+        baseURL: config.baseUrl,
+      });
+      this.clients.set(fingerprint, openai);
     }
-    return this.openai;
-  }
 
-  private get model(): string {
-    return process.env.OPENAI_MODEL || 'gpt-4o-mini';
+    return { openai, model: config.model };
   }
 
   private getCacheKey(type: string, params: any): string {
@@ -71,36 +80,33 @@ export class AiService {
   /**
    * 生成 AI 数据洞察
    */
-  async generateInsights(tenantId: number, days: number = 7): Promise<InsightResult[]> {
-    const openai = this.requireClient();
+  async generateInsights(
+    tenantId: number,
+    opts: GetSummaryOptions = {},
+  ): Promise<InsightResult[]> {
+    const { openai, model } = await this.resolveClient(tenantId);
+    const days = opts.days ?? 7;
 
-    // 检查缓存
-    const cacheKey = this.getCacheKey('insights', { tenantId, days });
+    // 缓存 key 追加 model 指纹，配置切换后旧缓存自然失效
+    const cacheKey = this.getCacheKey('insights', { tenantId, ...opts, model });
     const cached = this.getFromCache<InsightResult[]>(cacheKey);
     if (cached) {
       this.logger.debug(`返回缓存的洞察数据: ${cacheKey}`);
       return cached;
     }
 
-    // 获取数据上下文
-    const summary = await this.dashboardService.getSummary(tenantId, days);
-    const dataContext = this.buildDataContext(summary, days);
+    const summary = await this.dashboardService.getSummary(tenantId, opts);
+    const rangeLabel = this.buildRangeLabel(opts, days);
+    const dataContext = this.buildDataContext(summary, rangeLabel);
 
-    // 构建 Prompt
     const prompt = this.buildInsightsPrompt(dataContext);
 
     try {
       const completion = await openai.chat.completions.create({
-        model: this.model,
+        model,
         messages: [
-          {
-            role: 'system',
-            content: this.getSystemPrompt(),
-          },
-          {
-            role: 'user',
-            content: prompt,
-          },
+          { role: 'system', content: this.getSystemPrompt() },
+          { role: 'user', content: prompt },
         ],
         temperature: 0.7,
         max_tokens: 1500,
@@ -115,7 +121,6 @@ export class AiService {
       const parsed = JSON.parse(responseText);
       const insights: InsightResult[] = parsed.insights || [];
 
-      // 缓存结果
       this.setCache(cacheKey, insights);
 
       this.logger.log(`生成 ${insights.length} 条 AI 洞察，Token 使用: ${completion.usage?.total_tokens}`);
@@ -135,28 +140,23 @@ export class AiService {
     startDate: string,
     endDate: string,
   ): Promise<string> {
-    const openai = this.requireClient();
+    const { openai, model } = await this.resolveClient(tenantId);
 
-    const cacheKey = this.getCacheKey('report', { tenantId, type, startDate, endDate });
+    const cacheKey = this.getCacheKey('report', { tenantId, type, startDate, endDate, model });
     const cached = this.getFromCache<string>(cacheKey);
     if (cached) {
       return cached;
     }
 
-    // 计算天数（至少 1 天，防止无效区间）
-    const start = new Date(startDate);
-    const end = new Date(endDate);
-    const spanDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
-    const days = Number.isFinite(spanDays) && spanDays > 0 ? spanDays : 7;
-
-    const summary = await this.dashboardService.getSummary(tenantId, days);
-    const dataContext = this.buildDataContext(summary, days);
+    const summary = await this.dashboardService.getSummary(tenantId, { startDate, endDate });
+    const rangeLabel = `${startDate} ~ ${endDate}`;
+    const dataContext = this.buildDataContext(summary, rangeLabel);
 
     const prompt = this.buildReportPrompt(dataContext, type);
 
     try {
       const completion = await openai.chat.completions.create({
-        model: this.model,
+        model,
         messages: [
           { role: 'system', content: this.getSystemPrompt() },
           { role: 'user', content: prompt },
@@ -180,15 +180,15 @@ export class AiService {
    * 对话式查询
    */
   async chat(question: string, context: ChatContext): Promise<string> {
-    const openai = this.requireClient();
+    const { openai, model } = await this.resolveClient(context.tenantId);
 
     const days = context.days || 7;
-    const summary = await this.dashboardService.getSummary(context.tenantId, days);
-    const dataContext = this.buildDataContext(summary, days);
+    const summary = await this.dashboardService.getSummary(context.tenantId, { days });
+    const dataContext = this.buildDataContext(summary, `最近 ${days} 天`);
 
     try {
       const completion = await openai.chat.completions.create({
-        model: this.model,
+        model,
         messages: [
           { role: 'system', content: this.getSystemPrompt() },
           {
@@ -211,6 +211,14 @@ export class AiService {
 
   // ==================== 私有方法 ====================
 
+  /** 生成时间范围描述文案 */
+  private buildRangeLabel(opts: GetSummaryOptions, fallbackDays: number): string {
+    if (opts.startDate && opts.endDate) {
+      return `${opts.startDate} ~ ${opts.endDate}`;
+    }
+    return `最近 ${opts.days ?? fallbackDays} 天`;
+  }
+
   private getSystemPrompt(): string {
     return `你是一位资深的电商数据分析师，专门为电商商户提供数据洞察和优化建议。
 
@@ -231,10 +239,10 @@ export class AiService {
 - 数字保留2位小数`;
   }
 
-  private buildDataContext(summary: MetricsSummary, days: number): string {
+  private buildDataContext(summary: MetricsSummary, rangeLabel: string): string {
     const sign = (n: number) => (n > 0 ? '+' : '');
 
-    let context = `数据时间范围: 最近 ${days} 天\n\n`;
+    let context = `数据时间范围: ${rangeLabel}\n\n`;
     context += `== 核心指标 ==\n`;
     context += `总销售额: ¥${summary.totalGmv.toLocaleString('zh-CN', { maximumFractionDigits: 2 })} (环比 ${sign(summary.gmvGrowth)}${summary.gmvGrowth.toFixed(2)}%)\n`;
     context += `总订单量: ${summary.totalOrders.toLocaleString('zh-CN')} 单 (环比 ${sign(summary.ordersGrowth)}${summary.ordersGrowth.toFixed(2)}%)\n`;

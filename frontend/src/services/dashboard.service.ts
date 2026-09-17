@@ -30,8 +30,14 @@ export interface DailyMetric {
   uv: number;
 }
 
+export interface GetSummaryOptions {
+  days?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
 export const dashboardService = {
-  async getSummary(days = 7): Promise<MetricsSummary> {
-    return apiClient.get(`/dashboard/summary?days=${days}`);
+  async getSummary(opts: GetSummaryOptions = {}): Promise<MetricsSummary> {
+    return apiClient.get('/dashboard/summary', { params: opts });
   },
 };

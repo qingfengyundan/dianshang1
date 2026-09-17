@@ -7,8 +7,6 @@ import {
   Req,
   UseGuards,
   BadRequestException,
-  DefaultValuePipe,
-  ParseIntPipe,
 } from '@nestjs/common';
 import { AiService } from './ai.service.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
@@ -37,15 +35,24 @@ export class AiController {
   @Roles('merchant_admin', 'merchant_user')
   async getInsights(
     @Req() req: any,
-    @Query('days', new DefaultValuePipe(7), ParseIntPipe) days: number,
+    @Query('days') days?: string,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
   ) {
     const tenantId = this.resolveTenantId(req);
-    const insights = await this.aiService.generateInsights(tenantId, days);
+    const opts = {
+      days: days ? parseInt(days, 10) : undefined,
+      startDate,
+      endDate,
+    };
+    const insights = await this.aiService.generateInsights(tenantId, opts);
     return {
       success: true,
       data: insights,
       meta: {
-        days,
+        days: opts.days,
+        startDate: opts.startDate,
+        endDate: opts.endDate,
         generatedAt: new Date().toISOString(),
       },
     };

@@ -1,6 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { ServiceUnavailableException } from '@nestjs/common';
 import { AiService } from './ai.service.js';
+import { AiConfigService } from './ai-config.service.js';
 import { DashboardService, type MetricsSummary } from '../dashboard/dashboard.service.js';
 
 /** 与 /api/v1/dashboard/summary 真实返回结构一致的样例数据 */
@@ -43,14 +44,20 @@ const summary: MetricsSummary = {
 describe('AiService', () => {
   let service: AiService;
   const getSummary = vi.fn();
+  const resolveConfig = vi.fn();
   const originalKey = process.env.OPENAI_API_KEY;
 
   beforeEach(async () => {
     // 显式清空，保证本地配置了真实 Key 时测试结果依然稳定
     delete process.env.OPENAI_API_KEY;
     getSummary.mockReset().mockResolvedValue(summary);
+    resolveConfig.mockReset().mockResolvedValue(null);
     const module: TestingModule = await Test.createTestingModule({
-      providers: [AiService, { provide: DashboardService, useValue: { getSummary } }],
+      providers: [
+        AiService,
+        { provide: DashboardService, useValue: { getSummary } },
+        { provide: AiConfigService, useValue: { resolve: resolveConfig } },
+      ],
     }).compile();
     service = module.get(AiService);
   });
@@ -60,9 +67,11 @@ describe('AiService', () => {
     else process.env.OPENAI_API_KEY = originalKey;
   });
 
-  describe('未配置 OPENAI_API_KEY 时', () => {
+  describe('未配置 AI 服务时', () => {
     it('三个入口都抛出 503，而不是 500', async () => {
-      await expect(service.generateInsights(1, 7)).rejects.toThrow(ServiceUnavailableException);
+      await expect(service.generateInsights(1, { days: 7 })).rejects.toThrow(
+        ServiceUnavailableException,
+      );
       await expect(
         service.generateReport(1, 'weekly', '2026-09-01', '2026-09-07'),
       ).rejects.toThrow(ServiceUnavailableException);
@@ -72,23 +81,23 @@ describe('AiService', () => {
     });
 
     it('在调用 AI 之前失败，不会白跑一次数据库查询', async () => {
-      await expect(service.generateInsights(1, 7)).rejects.toThrow();
+      await expect(service.generateInsights(1, { days: 7 })).rejects.toThrow();
       expect(getSummary).not.toHaveBeenCalled();
     });
   });
 
   describe('buildDataContext', () => {
     // buildDataContext 是私有方法，这里通过实例访问以验证它与真实数据结构对齐
-    const build = (s: MetricsSummary, days: number): string =>
-      (service as any).buildDataContext(s, days);
+    const build = (s: MetricsSummary, rangeLabel: string): string =>
+      (service as any).buildDataContext(s, rangeLabel);
 
     it('读取的字段与 MetricsSummary 完全对应，不产生 undefined/NaN', () => {
-      const text = build(summary, 7);
+      const text = build(summary, '最近 7 天');
       expect(text).not.toMatch(/undefined|NaN/);
     });
 
     it('核心指标按真实字段名渲染，转化率换算为百分比', () => {
-      const text = build(summary, 7);
+      const text = build(summary, '最近 7 天');
       expect(text).toContain('数据时间范围: 最近 7 天');
       expect(text).toContain('总订单量: 2,823 单');
       expect(text).toContain('平均转化率: 3.17%');
@@ -97,13 +106,13 @@ describe('AiService', () => {
     });
 
     it('环比为正加 + 号，为负保留 - 号', () => {
-      const text = build(summary, 7);
+      const text = build(summary, '最近 7 天');
       expect(text).toContain('环比 +15.52%');
       expect(text).toContain('环比 -12.60%');
     });
 
     it('逐条列出店铺，并换算转化率与占比', () => {
-      const text = build(summary, 7);
+      const text = build(summary, '最近 7 天');
       expect(text).toContain('1. 旗舰店 (taobao)');
       expect(text).toContain('2. 拼多多店 (pinduoduo)');
       expect(text).toContain('转化率: 2.00%');
@@ -111,7 +120,7 @@ describe('AiService', () => {
     });
 
     it('趋势标题使用实际天数，避免少于 7 天时写死 7', () => {
-      const text = build(summary, 30);
+      const text = build(summary, '最近 30 天');
       expect(text).toContain('日趋势（最近 2 天）');
       expect(text).toContain('2026-09-10');
       expect(text).toContain('2026-09-11');
@@ -127,7 +136,7 @@ describe('AiService', () => {
           uv: 100,
         })),
       };
-      const text = build(long, 30);
+      const text = build(long, '最近 30 天');
       expect(text).toContain('日趋势（最近 7 天）');
       expect(text).toContain('2026-09-30');
       expect(text).not.toContain('2026-09-23');
@@ -140,8 +149,8 @@ describe('AiService', () => {
         shopBreakdown: [],
         dailyTrend: [],
       };
-      expect(() => build(empty, 7)).not.toThrow();
-      expect(build(empty, 7)).toContain('日趋势（最近 0 天）');
+      expect(() => build(empty, '最近 7 天')).not.toThrow();
+      expect(build(empty, '最近 7 天')).toContain('日趋势（最近 0 天）');
     });
   });
 });

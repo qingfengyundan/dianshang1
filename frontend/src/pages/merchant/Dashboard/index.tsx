@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import {
   Row, Col, Card, Select, Spin, message,
-  Table, Tag, Typography, Progress, Button, Collapse,
+  Table, Tag, Typography, Progress, Button, Collapse, DatePicker,
 } from 'antd';
 import {
   ArrowUpOutlined, ArrowDownOutlined, ShopOutlined,
@@ -9,8 +9,10 @@ import {
   FileTextOutlined, CommentOutlined,
 } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
+import dayjs from 'dayjs';
 import { dashboardService, type MetricsSummary } from '../../../services/dashboard.service';
 import { PLATFORM_LABELS } from '../../../constants';
+import { resolveQuickRange, type QuickRangeKey, type DateRange } from '../../../utils/dateRange';
 import { AiInsightsCard } from './AiInsightsCard';
 import { PlatformComparisonCard } from './PlatformComparisonCard';
 import { AiReportModal } from './AiReportModal';
@@ -24,26 +26,62 @@ const PLATFORM_COLORS: Record<string, string> = {
   douyin: '#000000',
 };
 
+const QUICK_RANGE_OPTIONS: { value: QuickRangeKey | 'custom'; label: string }[] = [
+  { value: 'today', label: '今天' },
+  { value: 'yesterday', label: '昨天' },
+  { value: 'thisWeek', label: '本周' },
+  { value: 'lastWeek', label: '上周' },
+  { value: 'thisMonth', label: '本月' },
+  { value: 'lastMonth', label: '上月' },
+  { value: 'last7d', label: '最近7天' },
+  { value: 'last14d', label: '最近14天' },
+  { value: 'last30d', label: '最近30天' },
+  { value: 'last60d', label: '最近60天' },
+  { value: 'custom', label: '自定义' },
+];
+
 const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(7);
+  const [range, setRange] = useState<DateRange>(() => resolveQuickRange('last7d'));
+  const [quickKey, setQuickKey] = useState<QuickRangeKey | 'custom'>('last7d');
   const [data, setData] = useState<MetricsSummary | null>(null);
   const [reportModalVisible, setReportModalVisible] = useState(false);
   const [chatModalVisible, setChatModalVisible] = useState(false);
 
   useEffect(() => {
-    fetchData(days);
-  }, [days]);
+    fetchData(range);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range]);
 
-  const fetchData = async (d: number) => {
+  const fetchData = async (r: DateRange) => {
     setLoading(true);
     try {
-      const summary = await dashboardService.getSummary(d);
+      const summary = await dashboardService.getSummary({
+        startDate: r.startDate,
+        endDate: r.endDate,
+      });
       setData(summary);
     } catch {
       message.error('数据加载失败');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleQuickChange = (key: QuickRangeKey | 'custom') => {
+    setQuickKey(key);
+    if (key !== 'custom') {
+      setRange(resolveQuickRange(key));
+    }
+  };
+
+  const handleRangeChange = (dates: any) => {
+    if (dates && dates[0] && dates[1]) {
+      setQuickKey('custom');
+      setRange({
+        startDate: dates[0].format('YYYY-MM-DD'),
+        endDate: dates[1].format('YYYY-MM-DD'),
+      });
     }
   };
 
@@ -146,9 +184,20 @@ const DashboardPage: React.FC = () => {
     <Spin spinning={loading}>
       <div style={{ padding: '0 4px' }}>
         {/* 顶部工具栏 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, flexWrap: 'wrap', gap: 8 }}>
           <Title level={4} style={{ margin: 0 }}>数据看板</Title>
-          <div style={{ display: 'flex', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+            <Select
+              value={quickKey}
+              onChange={handleQuickChange}
+              style={{ width: 120 }}
+              options={QUICK_RANGE_OPTIONS}
+            />
+            <DatePicker.RangePicker
+              value={[dayjs(range.startDate), dayjs(range.endDate)]}
+              onChange={handleRangeChange}
+              allowClear={false}
+            />
             <Button
               icon={<FileTextOutlined />}
               onClick={() => setReportModalVisible(true)}
@@ -162,22 +211,11 @@ const DashboardPage: React.FC = () => {
             >
               AI 助手
             </Button>
-            <Select
-              value={days}
-              onChange={setDays}
-              style={{ width: 120 }}
-              options={[
-                { value: 7, label: '最近7天' },
-                { value: 14, label: '最近14天' },
-                { value: 30, label: '最近30天' },
-                { value: 60, label: '最近60天' },
-              ]}
-            />
           </div>
         </div>
 
         {/* AI 运营洞察 —— 置顶：分析 + 建议是核心价值 */}
-        <AiInsightsCard days={days} />
+        <AiInsightsCard startDate={range.startDate} endDate={range.endDate} />
 
         {/* 跨平台对比 —— 单平台后台看不到的差异化价值 */}
         <PlatformComparisonCard shops={data?.shopBreakdown || []} />

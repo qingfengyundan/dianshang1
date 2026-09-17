@@ -6,6 +6,12 @@ export interface DateRange {
   endDate: Date;
 }
 
+export interface GetSummaryOptions {
+  days?: number;
+  startDate?: string;
+  endDate?: string;
+}
+
 export interface MetricsSummary {
   totalGmv: number;
   totalOrders: number;
@@ -40,16 +46,36 @@ export interface DailyMetric {
 export class DashboardService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async getSummary(tenantId: number, days = 7): Promise<MetricsSummary> {
-    const endDate = new Date();
-    endDate.setHours(23, 59, 59, 999);
-    const startDate = new Date();
-    startDate.setDate(startDate.getDate() - days);
-    startDate.setHours(0, 0, 0, 0);
+  async getSummary(tenantId: number, opts: GetSummaryOptions = {}): Promise<MetricsSummary> {
+    const { startDate: startDateStr, endDate: endDateStr } = opts;
+    const days = opts.days ?? 7;
+
+    let startDate: Date;
+    let endDate: Date;
+    let spanDays: number;
+
+    // 精确日期范围优先；否则退回「最近 N 天」
+    if (startDateStr && endDateStr) {
+      startDate = new Date(startDateStr);
+      endDate = new Date(endDateStr);
+      startDate.setHours(0, 0, 0, 0);
+      endDate.setHours(23, 59, 59, 999);
+      spanDays = Math.max(
+        1,
+        Math.round((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1,
+      );
+    } else {
+      endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - days);
+      startDate.setHours(0, 0, 0, 0);
+      spanDays = days;
+    }
 
     // 上一周期（对比用）
     const prevStartDate = new Date(startDate);
-    prevStartDate.setDate(prevStartDate.getDate() - days);
+    prevStartDate.setDate(prevStartDate.getDate() - spanDays);
 
     // 本期指标
     const [current, previous, shops, dailyData] = await Promise.all([
@@ -110,7 +136,7 @@ export class DashboardService {
       totalGmv,
       totalOrders: Number(current._sum.orders) || 0,
       avgConversionRate: Number(current._avg.conversionRate) || 0,
-      avgUv: Math.floor((Number(current._sum.uv) || 0) / days),
+      avgUv: Math.floor((Number(current._sum.uv) || 0) / spanDays),
       shopCount: shopIds.length,
       shopBreakdown,
       dailyTrend,

@@ -13,7 +13,9 @@ import {
 import { aiService, type AiInsight } from '../../../services/ai.service';
 
 interface AiInsightsCardProps {
-  days: number;
+  days?: number;
+  startDate?: string;
+  endDate?: string;
 }
 
 // 优先级视觉映射：高优先级用醒目的红色渐变 + 动画光晕，中等用橙色，低用蓝色
@@ -54,7 +56,7 @@ const CATEGORY_META: Record<
   warning: { label: '预警', icon: <FallOutlined />, color: '#ff4d4f', bg: '#fff1f0' },
 };
 
-export const AiInsightsCard: React.FC<AiInsightsCardProps> = ({ days }) => {
+export const AiInsightsCard: React.FC<AiInsightsCardProps> = ({ days, startDate, endDate }) => {
   const [insights, setInsights] = useState<AiInsight[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -64,13 +66,13 @@ export const AiInsightsCard: React.FC<AiInsightsCardProps> = ({ days }) => {
   useEffect(() => {
     loadInsights();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [days]);
+  }, [days, startDate, endDate]);
 
   const loadInsights = async () => {
     setLoading(true);
     setError(null);
     try {
-      const data = await aiService.getInsights(days);
+      const data = await aiService.getInsights({ days, startDate, endDate });
       setInsights(data);
       // 默认展开所有高优先级洞察
       setExpanded(new Set(data.map((_, i) => (data[i].priority === 'high' ? i : -1)).filter((i) => i >= 0)));

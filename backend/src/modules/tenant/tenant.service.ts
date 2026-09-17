@@ -20,6 +20,10 @@ export class TenantService {
       data: {
         name: dto.name,
         displayName: dto.displayName,
+        contactPerson: dto.contactPerson,
+        email: dto.email,
+        phone: dto.phone,
+        planType: dto.planType,
         config: dto.config || {},
         isActive: dto.isActive ?? true,
       },

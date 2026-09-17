@@ -1,8 +1,6 @@
 import React, { useMemo } from 'react';
-import { Card, Progress, Tag, Tooltip, Empty } from 'antd';
-import {
-  CrownOutlined,
-} from '@ant-design/icons';
+import { Card, Progress, Tag, Tooltip, Empty, Collapse } from 'antd';
+import { CrownOutlined, ShopOutlined } from '@ant-design/icons';
 import type { ShopMetrics } from '../../../services/dashboard.service';
 import { PLATFORM_LABELS } from '../../../constants';
 
@@ -37,7 +35,6 @@ function aggregateByPlatform(shops: ShopMetrics[]): PlatformAgg[] {
     };
     agg.gmv += s.gmv;
     agg.orders += s.orders;
-    // 转化率取平台内店铺的加权平均（按 UV 加权更合理，但这里按店铺均摊，避免单店异常放大）
     agg.conversionRate += s.conversionRate;
     agg.shopCount += 1;
     map.set(s.platform, agg);
@@ -48,8 +45,20 @@ function aggregateByPlatform(shops: ShopMetrics[]): PlatformAgg[] {
   }));
 }
 
+/** 按平台分组店铺（保留店铺级明细，用于店内展开） */
+function groupShopsByPlatform(shops: ShopMetrics[]): Map<string, ShopMetrics[]> {
+  const map = new Map<string, ShopMetrics[]>();
+  for (const s of shops) {
+    const list = map.get(s.platform) || [];
+    list.push(s);
+    map.set(s.platform, list);
+  }
+  return map;
+}
+
 export const PlatformComparisonCard: React.FC<PlatformComparisonCardProps> = ({ shops }) => {
   const aggregates = useMemo(() => aggregateByPlatform(shops), [shops]);
+  const grouped = useMemo(() => groupShopsByPlatform(shops), [shops]);
 
   if (aggregates.length === 0) {
     return (
@@ -79,6 +88,7 @@ export const PlatformComparisonCard: React.FC<PlatformComparisonCardProps> = ({ 
           const share = (agg.gmv / totalGmv) * 100;
           const isBestConv = agg.conversionRate === bestConv && bestConv > 0;
           const isBestGmv = agg.gmv === bestGmv && bestGmv > 0;
+          const platformShops = grouped.get(agg.platform) || [];
 
           return (
             <div
@@ -129,6 +139,49 @@ export const PlatformComparisonCard: React.FC<PlatformComparisonCardProps> = ({ 
                   订单 <b>{agg.orders.toLocaleString('zh-CN')}</b>
                 </span>
               </div>
+
+              {/* 同平台多店铺时，展开店内明细 */}
+              {platformShops.length > 1 && (
+                <Collapse
+                  ghost
+                  size="small"
+                  style={{ marginTop: 12, marginLeft: -8, marginRight: -8 }}
+                  items={[
+                    {
+                      key: agg.platform,
+                      label: (
+                        <span style={{ fontSize: 12, color: '#888' }}>
+                          <ShopOutlined /> 查看 {platformShops.length} 家店铺明细
+                        </span>
+                      ),
+                      children: (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {platformShops.map((s) => (
+                            <div
+                              key={s.shopId}
+                              style={{
+                                display: 'flex',
+                                justifyContent: 'space-between',
+                                alignItems: 'center',
+                                fontSize: 12,
+                                padding: '6px 10px',
+                                background: '#fff',
+                                borderRadius: 4,
+                                border: '1px solid #f5f5f5',
+                              }}
+                            >
+                              <span style={{ color: '#262626', fontWeight: 500 }}>{s.shopName}</span>
+                              <span style={{ color: '#888' }}>
+                                ¥{s.gmv.toLocaleString('zh-CN', { maximumFractionDigits: 0 })} · 转化 {(s.conversionRate * 100).toFixed(2)}%
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      ),
+                    },
+                  ]}
+                />
+              )}
             </div>
           );
         })}

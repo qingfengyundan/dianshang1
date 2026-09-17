@@ -38,6 +38,7 @@ model Tenant {
   agentTasks      AgentTask[]
   competitors     Competitor[]
   competitorAlerts CompetitorAlert[]
+  aiConfig        AiConfig?
 
   @@map("tenants")
 }
@@ -200,6 +201,23 @@ model AiAnalysis {
 
   @@index([tenantId])
   @@map("ai_analysis")
+}
+
+/// AI 服务配置表（tenantId 为 null 表示全局默认，否则为租户覆盖）
+model AiConfig {
+  id        Int      @id @default(autoincrement())
+  tenantId  Int?     @unique @map("tenant_id")
+  baseUrl   String   @map("base_url") @db.VarChar(255)
+  apiKey    String   @map("api_key") @db.VarChar(255)
+  model     String   @db.VarChar(50)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  // 关联
+  tenant    Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("ai_configs")
 }
 
 // ============================================

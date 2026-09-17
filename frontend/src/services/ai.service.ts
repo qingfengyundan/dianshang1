@@ -54,10 +54,10 @@ function toMessage(error: any, fallback: string): Error {
 
 class AiService {
   /** 获取 AI 数据洞察 */
-  async getInsights(days: number = 7): Promise<AiInsight[]> {
+  async getInsights(opts: { days?: number; startDate?: string; endDate?: string } = {}): Promise<AiInsight[]> {
     try {
       const res = await apiClient.get<never, AiInsightsResponse>('/ai/insights', {
-        params: { days },
+        params: opts,
       });
       return res.data;
     } catch (error) {

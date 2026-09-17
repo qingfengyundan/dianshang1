@@ -1,4 +1,4 @@
-import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsObject } from 'class-validator';
+import { IsString, IsNotEmpty, IsOptional, IsBoolean, IsObject, IsEmail } from 'class-validator';
 
 export class CreateTenantDto {
   @IsString()
@@ -8,6 +8,22 @@ export class CreateTenantDto {
   @IsString()
   @IsNotEmpty()
   displayName: string;
+
+  @IsOptional()
+  @IsString()
+  contactPerson?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'email 格式无效' })
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  planType?: string;
 
   @IsOptional()
   @IsObject()
@@ -26,6 +42,22 @@ export class UpdateTenantDto {
   @IsOptional()
   @IsString()
   displayName?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPerson?: string;
+
+  @IsOptional()
+  @IsEmail({}, { message: 'email 格式无效' })
+  email?: string;
+
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  planType?: string;
 
   @IsOptional()
   @IsObject()
