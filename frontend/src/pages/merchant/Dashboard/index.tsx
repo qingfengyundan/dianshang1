@@ -1,15 +1,19 @@
 import React, { useEffect, useState } from 'react';
 import {
   Row, Col, Card, Statistic, Select, Spin, message,
-  Table, Tag, Typography, Progress,
+  Table, Tag, Typography, Progress, Button,
 } from 'antd';
 import {
   ArrowUpOutlined, ArrowDownOutlined, ShopOutlined,
   ThunderboltOutlined, TeamOutlined, BarChartOutlined,
+  FileTextOutlined, CommentOutlined,
 } from '@ant-design/icons';
 import ReactECharts from 'echarts-for-react';
 import { dashboardService, type MetricsSummary } from '../../../services/dashboard.service';
 import { PLATFORM_LABELS } from '../../../constants';
+import { AiInsightsCard } from './AiInsightsCard';
+import { AiReportModal } from './AiReportModal';
+import { AiChatModal } from './AiChatModal';
 
 const { Title } = Typography;
 
@@ -23,6 +27,8 @@ const DashboardPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(7);
   const [data, setData] = useState<MetricsSummary | null>(null);
+  const [reportModalVisible, setReportModalVisible] = useState(false);
+  const [chatModalVisible, setChatModalVisible] = useState(false);
 
   useEffect(() => {
     fetchData(days);
@@ -117,17 +123,32 @@ const DashboardPage: React.FC = () => {
         {/* 顶部工具栏 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
           <Title level={4} style={{ margin: 0 }}>数据看板</Title>
-          <Select
-            value={days}
-            onChange={setDays}
-            style={{ width: 120 }}
-            options={[
-              { value: 7, label: '最近7天' },
-              { value: 14, label: '最近14天' },
-              { value: 30, label: '最近30天' },
-              { value: 60, label: '最近60天' },
-            ]}
-          />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button
+              icon={<FileTextOutlined />}
+              onClick={() => setReportModalVisible(true)}
+            >
+              生成报告
+            </Button>
+            <Button
+              icon={<CommentOutlined />}
+              onClick={() => setChatModalVisible(true)}
+              type="primary"
+            >
+              AI 助手
+            </Button>
+            <Select
+              value={days}
+              onChange={setDays}
+              style={{ width: 120 }}
+              options={[
+                { value: 7, label: '最近7天' },
+                { value: 14, label: '最近14天' },
+                { value: 30, label: '最近30天' },
+                { value: 60, label: '最近60天' },
+              ]}
+            />
+          </div>
         </div>
 
         {/* 核心指标卡片 */}
@@ -216,6 +237,21 @@ const DashboardPage: React.FC = () => {
             size="middle"
           />
         </Card>
+
+        {/* AI 数据洞察 */}
+        <AiInsightsCard days={days} />
+
+        {/* AI 报告生成弹窗 */}
+        <AiReportModal
+          visible={reportModalVisible}
+          onClose={() => setReportModalVisible(false)}
+        />
+
+        {/* AI 对话助手弹窗 */}
+        <AiChatModal
+          visible={chatModalVisible}
+          onClose={() => setChatModalVisible(false)}
+        />
       </div>
     </Spin>
   );

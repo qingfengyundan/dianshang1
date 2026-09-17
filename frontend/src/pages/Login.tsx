@@ -2,8 +2,8 @@ import React, { useState } from 'react';
 import { Form, Input, Button, Card, message, Typography } from 'antd';
 import { UserOutlined, LockOutlined } from '@ant-design/icons';
 import { useNavigate } from 'react-router-dom';
-import { authService } from '../../services/auth.service';
-import type { LoginRequest } from '../../../../shared/types';
+import { authService } from '../services/auth.service';
+import type { LoginRequest } from '../../../shared/types';
 import './Login.css';
 
 const { Title, Text } = Typography;
