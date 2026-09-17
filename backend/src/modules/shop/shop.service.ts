@@ -1,26 +1,14 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../database/prisma.service.js';
 import { Shop } from '@prisma/client';
+import type { CreateShopDto, UpdateShopDto } from './dto/shop.dto.js';
 
-export interface CreateShopDto {
-  tenantId: number;
-  name: string;
-  platform: string;
-  shopUrl?: string;
-  apiKey?: string;
-  apiSecret?: string;
-  accessToken?: string;
-  isActive?: boolean;
-}
+// 对外的店铺对象：剥离凭证字段，避免 API 响应泄露 apiKey / apiSecret / accessToken
+export type SafeShop = Omit<Shop, 'apiKey' | 'apiSecret' | 'accessToken'>;
 
-export interface UpdateShopDto {
-  name?: string;
-  platform?: string;
-  shopUrl?: string;
-  apiKey?: string;
-  apiSecret?: string;
-  accessToken?: string;
-  isActive?: boolean;
+export function sanitizeShop(shop: Shop): SafeShop {
+  const { apiKey, apiSecret, accessToken, ...rest } = shop;
+  return rest;
 }
 
 @Injectable()
@@ -30,7 +18,7 @@ export class ShopService {
   async createShop(dto: CreateShopDto): Promise<Shop> {
     return this.prisma.shop.create({
       data: {
-        tenantId: dto.tenantId,
+        tenantId: dto.tenantId!, // controller 已保证 tenantId 非空
         name: dto.name,
         platform: dto.platform,
         shopUrl: dto.shopUrl,

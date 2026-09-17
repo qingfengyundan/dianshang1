@@ -1,7 +1,9 @@
 import React from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Login } from './pages/Login';
+import MerchantLayout from './pages/merchant/Layout';
 import DashboardPage from './pages/merchant/Dashboard';
+import ShopsPage from './pages/merchant/Shops';
 import { authService } from './services/auth.service';
 
 // 路由守卫
@@ -19,16 +21,21 @@ function App() {
 
         {/* 商家后台路由 */}
         <Route
-          path="/merchant/dashboard"
+          path="/merchant"
           element={
             <PrivateRoute>
-              <DashboardPage />
+              <MerchantLayout />
             </PrivateRoute>
           }
-        />
+        >
+          <Route path="dashboard" element={<DashboardPage />} />
+          <Route path="shops" element={<ShopsPage />} />
+          <Route index element={<Navigate to="/merchant/dashboard" />} />
+        </Route>
 
         {/* 默认重定向 */}
         <Route path="/" element={<Navigate to="/merchant/dashboard" />} />
+        <Route path="*" element={<Navigate to="/merchant/dashboard" />} />
       </Routes>
     </BrowserRouter>
   );

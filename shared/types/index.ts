@@ -46,10 +46,11 @@ export interface Shop {
   tenantId: number;
   name: string;
   platform: Platform;
-  shopUrl: string;
-  status: string;
+  shopUrl?: string;
+  isActive: boolean;
   lastSyncAt?: string;
   createdAt: string;
+  updatedAt: string;
 }
 
 export type Platform = 'taobao' | 'pinduoduo' | 'douyin';

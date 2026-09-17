@@ -9,9 +9,10 @@ import {
   ParseIntPipe,
   UseGuards,
   Req,
+  BadRequestException,
 } from '@nestjs/common';
-import { ShopService } from './shop.service.js';
-import type { CreateShopDto, UpdateShopDto } from './shop.service.js';
+import { ShopService, sanitizeShop } from './shop.service.js';
+import { CreateShopDto, UpdateShopDto } from './dto/shop.dto.js';
 import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard.js';
 import { RolesGuard } from '../../common/guards/roles.guard.js';
 import { Roles } from '../../common/decorators/roles.decorator.js';
@@ -28,7 +29,11 @@ export class ShopController {
     if (req.user.role === 'merchant_admin') {
       dto.tenantId = req.user.tenantId;
     }
-    return this.shopService.createShop(dto);
+    if (!dto.tenantId) {
+      throw new BadRequestException('缺少 tenantId');
+    }
+    const shop = await this.shopService.createShop(dto);
+    return sanitizeShop(shop);
   }
 
   @Get()
@@ -38,14 +43,16 @@ export class ShopController {
     if (!tenantId && req.user.role !== 'system_admin') {
       return [];
     }
-    return this.shopService.findByTenant(tenantId || req.user.tenantId);
+    const shops = await this.shopService.findByTenant(tenantId || req.user.tenantId);
+    return shops.map(sanitizeShop);
   }
 
   @Get(':id')
   @Roles('system_admin', 'merchant_admin', 'merchant_user')
   async findOne(@Param('id', ParseIntPipe) id: number, @Req() req: any) {
     const tenantId = req.user.role === 'system_admin' ? undefined : req.user.tenantId;
-    return this.shopService.findOne(id, tenantId);
+    const shop = await this.shopService.findOne(id, tenantId);
+    return sanitizeShop(shop);
   }
 
   @Put(':id')
@@ -56,7 +63,8 @@ export class ShopController {
     @Req() req: any,
   ) {
     const tenantId = req.user.role === 'system_admin' ? undefined : req.user.tenantId;
-    return this.shopService.update(id, dto, tenantId);
+    const shop = await this.shopService.update(id, dto, tenantId);
+    return sanitizeShop(shop);
   }
 
   @Delete(':id')
