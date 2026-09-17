@@ -1,5 +1,7 @@
 import apiClient from './api';
 
+const AI_REQUEST_TIMEOUT = 120_000;
+
 export interface AiInsight {
   title: string;
   description: string;
@@ -48,6 +50,9 @@ export interface ChatResponse {
 
 /** 从 axios 错误中提取后端返回的中文提示 */
 function toMessage(error: any, fallback: string): Error {
+  if (error?.code === 'ECONNABORTED') {
+    return new Error('AI 分析响应较慢，请稍后重试');
+  }
   const detail = error?.response?.data?.message;
   return new Error(Array.isArray(detail) ? detail.join('；') : detail || fallback);
 }
@@ -58,6 +63,7 @@ class AiService {
     try {
       const res = await apiClient.get<never, AiInsightsResponse>('/ai/insights', {
         params: opts,
+        timeout: AI_REQUEST_TIMEOUT,
       });
       return res.data;
     } catch (error) {
@@ -68,7 +74,9 @@ class AiService {
   /** 生成智能报告 */
   async generateReport(request: GenerateReportRequest): Promise<string> {
     try {
-      const res = await apiClient.post<never, GenerateReportResponse>('/ai/report', request);
+      const res = await apiClient.post<never, GenerateReportResponse>('/ai/report', request, {
+        timeout: AI_REQUEST_TIMEOUT,
+      });
       return res.data.report;
     } catch (error) {
       throw toMessage(error, '生成报告失败');
@@ -78,7 +86,9 @@ class AiService {
   /** AI 对话查询 */
   async chat(question: string, days: number = 7): Promise<string> {
     try {
-      const res = await apiClient.post<never, ChatResponse>('/ai/chat', { question, days });
+      const res = await apiClient.post<never, ChatResponse>('/ai/chat', { question, days }, {
+        timeout: AI_REQUEST_TIMEOUT,
+      });
       return res.data.answer;
     } catch (error) {
       throw toMessage(error, 'AI 对话失败');
