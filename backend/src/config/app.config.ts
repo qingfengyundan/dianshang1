@@ -36,6 +36,9 @@ export const jwtConfig = {
 };
 
 // ========== AI 服务配置 ==========
+// ⚠️ 当前未被任何代码引用，仅为原计划（Claude API）的预留配置。
+// 实际生效的是 ai.service.ts 直接读取的 OPENAI_API_KEY / OPENAI_BASE_URL / OPENAI_MODEL。
+// 若后续切回 Claude，需同时替换 SDK 与 ai.service.ts 的调用方式。
 export const aiConfig = {
   provider: 'claude',
   apiKey: process.env.CLAUDE_API_KEY || '',
@@ -46,6 +49,7 @@ export const aiConfig = {
 };
 
 // ========== 智能体配置 ==========
+// ⚠️ 当前未被引用，阶段 4「智能体控制」的预留配置。
 export const agentConfig = {
   codex: {
     host: process.env.CODEX_AGENT_HOST || 'localhost',
@@ -60,6 +64,7 @@ export const agentConfig = {
 };
 
 // ========== 日志配置 ==========
+// ⚠️ 当前未被引用；winston 与 winston-daily-rotate-file 已安装但尚未接入。
 export const logConfig = {
   level: process.env.LOG_LEVEL || 'info',
   dir: process.env.LOG_DIR || 'logs',

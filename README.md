@@ -9,10 +9,12 @@
 2. **多店铺管理** - 汇总淘宝/拼多多/抖音等平台店铺数据
 3. **数据看板** - 实时展示 GMV、订单量、转化率等核心指标
 4. **趋势分析** - 可视化销售趋势、店铺占比、环比增长
+5. **AI 数据分析** - 自动生成数据洞察、周报/月报，并支持对话式数据问答
 
 ### 技术栈
 - **后端**: NestJS + Prisma ORM + PostgreSQL + Redis + JWT
 - **前端**: React 18 + TypeScript + Vite + Ant Design + ECharts
+- **AI**: OpenAI Chat Completions API（兼容任意 OpenAI 协议服务）
 - **基础设施**: Docker Compose
 
 ---
@@ -31,14 +33,15 @@ cd dianshang1
 
 ### 2. 启动数据库服务
 ```bash
-docker-compose up -d
+# compose 文件在 docker/ 子目录下，不在仓库根目录
+docker compose -f docker/docker-compose.yml up -d
 ```
 
 ### 3. 后端启动
 ```bash
 cd backend
 npm install
-npx prisma migrate dev        # 执行数据库迁移
+npx prisma db push            # 同步数据库结构（当前尚无 migrations 目录）
 npx tsx src/database/seeds/seed.ts  # 填充演示数据
 npm run start:dev             # 启动后端 (http://localhost:3000)
 ```
@@ -64,17 +67,28 @@ npm run dev                   # 启动前端 (http://localhost:5173)
 ## 📊 已实现功能
 
 ### ✅ 阶段 1: 基础架构
-- [x] 数据库设计 (11张表: User, Tenant, Shop, Metric 等)
+- [x] 数据库设计 (12 个 Prisma 模型；已投入使用 4 个: Tenant / User / Shop / Metric)
 - [x] JWT 认证与授权系统
 - [x] 多租户隔离中间件
 - [x] Prisma ORM 集成
 
 ### ✅ 阶段 2: 核心业务
 - [x] 租户管理 API (CRUD)
-- [x] 店铺管理 API (支持淘宝/拼多多/抖音)
+- [x] 店铺管理 API (支持淘宝/拼多多/抖音，响应已剥离凭证字段)
 - [x] 数据看板 API (汇总指标/店铺分组/日趋势)
 - [x] 前端登录页面
 - [x] 前端数据看板页面
+- [x] 前端店铺管理页面（列表 + 新增/编辑/启用停用，含商家后台侧边导航）
+
+### ✅ 阶段 3: AI 数据分析
+- [x] 集成 OpenAI API 进行数据洞察（自动识别趋势/异常/机会/预警）
+- [x] 自动生成周报/月报（Markdown 格式，支持下载）
+- [x] 对话式数据问答助手
+- [x] 结果内存缓存 15 分钟，降低 Token 消耗
+- [x] 未配置 API Key 时 AI 接口返回 503，其余功能不受影响
+
+> AI 功能需在 `backend/.env` 中配置 `OPENAI_API_KEY`。
+> 未配置时平台其余功能正常可用，仅 AI 相关接口返回 503 提示。
 
 ### 📦 演示数据
 - 1 个演示租户 (演示电商商户)
@@ -109,16 +123,20 @@ dianshang1/
 │   │   ├── pages/
 │   │   │   ├── Login/      # 登录页
 │   │   │   └── merchant/
-│   │   │       └── Dashboard/  # 数据看板
+│   │   │       ├── Layout.tsx      # 商家后台侧边导航布局
+│   │   │       ├── Dashboard/      # 数据看板
+│   │   │       └── Shops/          # 店铺管理
 │   │   ├── services/       # API 服务层
 │   │   ├── store/          # Zustand 状态管理
-│   │   └── constants.ts
+│   │   └── constants/
 │   └── package.json
 │
 ├── shared/                  # 前后端共享类型
-│   └── types.ts
+│   └── types/
+│       └── index.ts
 │
-├── docker-compose.yml       # PostgreSQL + Redis
+├── docker/
+│   └── docker-compose.yml   # PostgreSQL + Redis + pgAdmin
 └── README.md
 ```
 
@@ -135,15 +153,33 @@ dianshang1/
 - `POST /api/v1/tenant` - 创建租户
 
 ### 店铺接口
-- `GET /api/v1/shop` - 获取当前租户的所有店铺
-- `POST /api/v1/shop` - 添加店铺
-- `PATCH /api/v1/shop/:id` - 更新店铺信息
-- `DELETE /api/v1/shop/:id` - 删除店铺
+> 路由前缀为 `/shops`（复数）。响应**已剥离凭证字段**（`apiKey` / `apiSecret` / `accessToken` 不返回）。
+> 新增/修改权限: `merchant_admin` / `system_admin`；查看权限: 三个角色均可。
+> 商户管理员新增时 `tenantId` 由 token 自动注入，无需（也不应）在 body 中传。
+
+- `GET /api/v1/shops` - 获取当前租户的所有店铺
+- `POST /api/v1/shops` - 添加店铺（`platform` 限 `taobao` / `pinduoduo` / `douyin`）
+- `PUT /api/v1/shops/:id` - 更新店铺信息（含 `isActive` 启用/停用）
+- `DELETE /api/v1/shops/:id` - 停用店铺（软删除，置 `isActive: false`）
 
 ### 数据看板接口
 - `GET /api/v1/dashboard/summary?days=7` - 获取汇总指标
   - 参数: `days` (7/14/30/60)
   - 返回: 总GMV、订单量、UV、转化率、店铺分组、日趋势、环比增长
+
+### AI 接口
+> 均需登录；未配置 `OPENAI_API_KEY` 时返回 503。
+
+- `GET /api/v1/ai/insights?days=7` - 获取 AI 数据洞察
+  - 权限: `merchant_admin` / `merchant_user`
+  - 返回: 3-5 条洞察，含 `title` / `description` / `suggestion` / `priority` / `category`
+- `POST /api/v1/ai/report` - 生成智能周报/月报
+  - 权限: `merchant_admin`
+  - 参数: `{ "type": "weekly" | "monthly", "startDate": "2026-09-09", "endDate": "2026-09-16" }`
+  - 返回: Markdown 格式报告正文
+- `POST /api/v1/ai/chat` - 对话式数据问答
+  - 权限: `merchant_admin` / `merchant_user`
+  - 参数: `{ "question": "哪个店铺转化最好？", "days": 7 }`（问题上限 500 字，`days` 上限 90）
 
 ---
 
@@ -176,19 +212,21 @@ npm run preview       # 预览生产构建
 
 ### Docker
 ```bash
-docker-compose up -d          # 启动服务
-docker-compose down           # 停止服务
-docker-compose logs postgres  # 查看 PostgreSQL 日志
+# 所有命令都要加 -f docker/docker-compose.yml（compose 文件不在仓库根目录）
+docker compose -f docker/docker-compose.yml up -d          # 启动服务
+docker compose -f docker/docker-compose.yml down           # 停止服务
+docker compose -f docker/docker-compose.yml logs postgres  # 查看 PostgreSQL 日志
 ```
+
+服务端口: PostgreSQL `5432` · Redis `6379` · pgAdmin `5050`
 
 ---
 
 ## 🛣️ 后续规划
 
-### 阶段 3: AI 数据分析
-- [ ] 集成 OpenAI API 进行数据洞察
-- [ ] 自动生成周报/月报
-- [ ] 异常数据预警
+> 阶段 3 已完成，详见上方「已实现功能」。剩余待办：
+- [ ] 异常数据主动预警（定时任务 + 通知渠道）
+- [ ] AI 结果持久化，支持历史报告回看
 
 ### 阶段 4: 智能体管理
 - [ ] 集成 Claude Code 智能体
@@ -213,11 +251,17 @@ JWT_SECRET=your-super-secret-jwt-key-change-in-production
 JWT_EXPIRES_IN=7d
 REFRESH_TOKEN_SECRET=your-refresh-token-secret
 REFRESH_TOKEN_EXPIRES_IN=30d
+
+# AI（可选，不配置则 AI 接口返回 503，其余功能正常）
+OPENAI_API_KEY=your-openai-api-key-here
+OPENAI_BASE_URL=https://api.openai.com/v1
+OPENAI_MODEL=gpt-4o-mini
 ```
 
 ### 前端 (`frontend/.env`)
 ```env
-VITE_API_BASE_URL=http://localhost:3000/api/v1
+# 只填服务地址，不要带 /api/v1，前缀由代码自动追加
+VITE_API_BASE_URL=http://localhost:3000
 ```
 
 ---
