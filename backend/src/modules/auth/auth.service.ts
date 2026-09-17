@@ -1,4 +1,4 @@
-import { Injectable, UnauthorizedException } from '@nestjs/common';
+import { ForbiddenException, Injectable, UnauthorizedException } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import * as bcrypt from 'bcrypt';
 import { PrismaService } from '../../database/prisma.service.js';
@@ -12,6 +12,10 @@ export class AuthService {
   ) {}
 
   async register(createUserDto: CreateUserDto): Promise<UserResponseDto> {
+    if (createUserDto.role === 'system_admin') {
+      throw new ForbiddenException('系统管理员账号不可通过注册接口创建');
+    }
+
     // 检查用户名是否已存在
     const existingUser = await this.prisma.user.findUnique({
       where: { username: createUserDto.username },
@@ -42,10 +46,15 @@ export class AuthService {
     // 查找用户
     const user = await this.prisma.user.findUnique({
       where: { username: loginDto.username },
+      include: { tenant: { select: { isActive: true } } },
     });
 
     if (!user) {
       throw new UnauthorizedException('用户名或密码错误');
+    }
+
+    if (!user.isActive || (user.tenantId && !user.tenant?.isActive)) {
+      throw new UnauthorizedException('账号或所属商户已停用');
     }
 
     // 验证密码
@@ -79,17 +88,22 @@ export class AuthService {
   async validateUser(userId: number) {
     const user = await this.prisma.user.findUnique({
       where: { id: userId },
+      include: { tenant: { select: { isActive: true } } },
     });
 
     if (!user) {
       throw new UnauthorizedException('用户不存在');
     }
 
+    if (!user.isActive || (user.tenantId && !user.tenant?.isActive)) {
+      throw new UnauthorizedException('账号或所属商户已停用');
+    }
+
     return this.sanitizeUser(user);
   }
 
   private sanitizeUser(user: any): UserResponseDto {
-    const { passwordHash, ...result } = user;
+    const { passwordHash, tenant, ...result } = user;
     return result;
   }
 }

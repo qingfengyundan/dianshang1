@@ -1,12 +1,17 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import {
-  Card, Table, Button, Tag, Space, Typography, message, Popconfirm, Spin, Modal, Form, Input, Switch, Alert, Divider,
+  Card, Table, Button, Tag, Space, Typography, message, Popconfirm, Spin, Modal, Form, Input, Switch, Alert, Divider, Select,
 } from 'antd';
 import {
-  PlusOutlined, EditOutlined, DeleteOutlined, RobotOutlined, ReloadOutlined,
+  PlusOutlined, EditOutlined, DeleteOutlined, RobotOutlined, ReloadOutlined, TeamOutlined,
 } from '@ant-design/icons';
 import { tenantService, type Tenant, type CreateTenantInput } from '../../../services/tenant.service';
 import { aiConfigService, type SafeAiConfig } from '../../../services/ai-config.service';
+import {
+  merchantAccountService,
+  type MerchantAccount,
+  type MerchantAccountRole,
+} from '../../../services/merchant-account.service';
 
 const { Title, Text } = Typography;
 
@@ -26,6 +31,16 @@ interface AiConfigFormValues {
   model: string;
 }
 
+interface AccountFormValues {
+  username: string;
+  password: string;
+  role: MerchantAccountRole;
+}
+
+interface ResetPasswordFormValues {
+  password: string;
+}
+
 const MerchantsPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [tenants, setTenants] = useState<Tenant[]>([]);
@@ -41,6 +56,16 @@ const MerchantsPage: React.FC = () => {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiSubmitting, setAiSubmitting] = useState(false);
   const [aiForm] = Form.useForm<AiConfigFormValues>();
+
+  const [accountModalVisible, setAccountModalVisible] = useState(false);
+  const [accountTenant, setAccountTenant] = useState<Tenant | null>(null);
+  const [accounts, setAccounts] = useState<MerchantAccount[]>([]);
+  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [accountSubmitting, setAccountSubmitting] = useState(false);
+  const [accountForm] = Form.useForm<AccountFormValues>();
+  const [resettingAccount, setResettingAccount] = useState<MerchantAccount | null>(null);
+  const [resetSubmitting, setResetSubmitting] = useState(false);
+  const [resetForm] = Form.useForm<ResetPasswordFormValues>();
 
   const fetchTenants = useCallback(async () => {
     setLoading(true);
@@ -168,6 +193,69 @@ const MerchantsPage: React.FC = () => {
     }
   };
 
+  const loadAccounts = async (tenantId: number) => {
+    setAccountsLoading(true);
+    try {
+      setAccounts(await merchantAccountService.list(tenantId));
+    } catch (err: any) {
+      message.error(err.message);
+    } finally {
+      setAccountsLoading(false);
+    }
+  };
+
+  const openAccountManager = (tenant: Tenant) => {
+    setAccountTenant(tenant);
+    setAccounts([]);
+    accountForm.resetFields();
+    accountForm.setFieldsValue({ role: 'merchant_user' });
+    setAccountModalVisible(true);
+    loadAccounts(tenant.id);
+  };
+
+  const createAccount = async () => {
+    if (!accountTenant) return;
+    try {
+      const values = await accountForm.validateFields();
+      setAccountSubmitting(true);
+      await merchantAccountService.create({ ...values, tenantId: accountTenant.id });
+      message.success('商户账号已创建');
+      accountForm.resetFields();
+      accountForm.setFieldsValue({ role: 'merchant_user' });
+      await loadAccounts(accountTenant.id);
+    } catch (err: any) {
+      if (err?.message) message.error(err.message);
+    } finally {
+      setAccountSubmitting(false);
+    }
+  };
+
+  const toggleAccountActive = async (account: MerchantAccount) => {
+    try {
+      await merchantAccountService.updateStatus(account.id, !account.isActive);
+      message.success(account.isActive ? '账号已停用' : '账号已启用');
+      if (accountTenant) await loadAccounts(accountTenant.id);
+    } catch (err: any) {
+      message.error(err.message);
+    }
+  };
+
+  const resetAccountPassword = async () => {
+    if (!resettingAccount) return;
+    try {
+      const { password } = await resetForm.validateFields();
+      setResetSubmitting(true);
+      await merchantAccountService.resetPassword(resettingAccount.id, password);
+      setResettingAccount(null);
+      resetForm.resetFields();
+      message.success('密码已重置');
+    } catch (err: any) {
+      if (err?.message) message.error(err.message);
+    } finally {
+      setResetSubmitting(false);
+    }
+  };
+
   const columns = [
     { title: 'ID', dataIndex: 'id', key: 'id', width: 60 },
     {
@@ -199,6 +287,9 @@ const MerchantsPage: React.FC = () => {
           </Button>
           <Button size="small" icon={<RobotOutlined />} onClick={() => openAiConfig(tenant)}>
             AI 配置
+          </Button>
+          <Button size="small" icon={<TeamOutlined />} onClick={() => openAccountManager(tenant)}>
+            账号管理
           </Button>
           <Popconfirm
             title={tenant.isActive ? '停用该商户？' : '启用该商户？'}
@@ -266,6 +357,65 @@ const MerchantsPage: React.FC = () => {
           </Form.Item>
           <Form.Item name="isActive" label="启用状态" valuePropName="checked">
             <Switch />
+          </Form.Item>
+        </Form>
+      </Modal>
+
+      <Modal
+        title={accountTenant ? `账号管理 - ${accountTenant.displayName}` : '账号管理'}
+        open={accountModalVisible}
+        onCancel={() => setAccountModalVisible(false)}
+        footer={null}
+        width={760}
+        destroyOnClose
+      >
+        <Form form={accountForm} layout="vertical" onFinish={createAccount}>
+          <Space align="start" style={{ display: 'flex' }}>
+            <Form.Item name="username" label="登录账号" rules={[{ required: true, message: '请输入登录账号' }, { min: 3, message: '账号至少 3 个字符' }]} style={{ flex: 1 }}>
+              <Input placeholder="如 merchant2_admin" maxLength={100} />
+            </Form.Item>
+            <Form.Item name="password" label="初始密码" rules={[{ required: true, message: '请输入初始密码' }, { min: 6, message: '密码至少 6 个字符' }]} style={{ flex: 1 }}>
+              <Input.Password placeholder="至少 6 个字符" maxLength={100} />
+            </Form.Item>
+            <Form.Item name="role" label="角色" rules={[{ required: true, message: '请选择角色' }]} style={{ width: 132 }}>
+              <Select options={[{ value: 'merchant_admin', label: '商户管理员' }, { value: 'merchant_user', label: '商户成员' }]} />
+            </Form.Item>
+            <Form.Item label=" ">
+              <Button type="primary" htmlType="submit" loading={accountSubmitting}>创建账号</Button>
+            </Form.Item>
+          </Space>
+        </Form>
+
+        <Table
+          loading={accountsLoading}
+          dataSource={accounts}
+          rowKey="id"
+          size="small"
+          pagination={false}
+          locale={{ emptyText: '暂无商户账号' }}
+          columns={[
+            { title: '账号', dataIndex: 'username', key: 'username' },
+            { title: '角色', dataIndex: 'role', key: 'role', render: (role: MerchantAccountRole) => role === 'merchant_admin' ? <Tag color="blue">商户管理员</Tag> : <Tag>商户成员</Tag> },
+            { title: '状态', dataIndex: 'isActive', key: 'isActive', render: (active: boolean) => active ? <Tag color="success">启用</Tag> : <Tag>已停用</Tag> },
+            { title: '创建时间', dataIndex: 'createdAt', key: 'createdAt', render: (value: string) => new Date(value).toLocaleDateString('zh-CN') },
+            { title: '操作', key: 'actions', render: (_: unknown, account: MerchantAccount) => <Space size="small"><Button size="small" onClick={() => setResettingAccount(account)}>重置密码</Button><Popconfirm title={account.isActive ? '停用该账号后将无法登录，是否继续？' : '启用该账号？'} okText="确定" cancelText="取消" onConfirm={() => toggleAccountActive(account)}><Button size="small" danger={account.isActive}>{account.isActive ? '停用' : '启用'}</Button></Popconfirm></Space> },
+          ]}
+        />
+      </Modal>
+
+      <Modal
+        title={resettingAccount ? `重置密码 - ${resettingAccount.username}` : '重置密码'}
+        open={!!resettingAccount}
+        onCancel={() => { setResettingAccount(null); resetForm.resetFields(); }}
+        onOk={resetAccountPassword}
+        confirmLoading={resetSubmitting}
+        okText="确认重置"
+        cancelText="取消"
+        destroyOnClose
+      >
+        <Form form={resetForm} layout="vertical">
+          <Form.Item name="password" label="新密码" rules={[{ required: true, message: '请输入新密码' }, { min: 6, message: '密码至少 6 个字符' }]}>
+            <Input.Password autoComplete="new-password" placeholder="至少 6 个字符" maxLength={100} />
           </Form.Item>
         </Form>
       </Modal>

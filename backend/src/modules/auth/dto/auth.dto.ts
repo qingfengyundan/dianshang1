@@ -38,5 +38,6 @@ export class UserResponseDto {
   role: string;
   tenantId?: number;
   permissions?: Record<string, any>;
+  isActive: boolean;
   createdAt: Date;
 }

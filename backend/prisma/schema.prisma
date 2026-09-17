@@ -51,6 +51,7 @@ model User {
   passwordHash String    @map("password_hash") @db.VarChar(255)
   role         String    @db.VarChar(20) // system_admin, merchant_admin, merchant_user
   permissions  Json?
+  isActive     Boolean   @default(true) @map("is_active")
   createdAt    DateTime  @default(now()) @map("created_at")
 
   // 关联
